@@ -1,9 +1,14 @@
 import React from 'react';
 
-const Sidebar = ({ sections, onOpenModal, activeSectionId, onScrollToSection }) => {
+const Sidebar = ({ sections, onOpenModal, activeSectionId, onScrollToSection, onNavigateMobile }) => {
   return (
     <aside className="app-sidebar">
-      <div className="sidebar-title">Navigation Pane</div>
+      <div className="sidebar-header-row">
+        <div className="sidebar-title">Navigation Pane</div>
+        {sections.length > 0 && (
+          <span className="sidebar-badge">{sections.length}</span>
+        )}
+      </div>
       
       <button 
         className="create-sec-btn"
@@ -24,10 +29,16 @@ const Sidebar = ({ sections, onOpenModal, activeSectionId, onScrollToSection }) 
           className="nav-link"
           onClick={(e) => {
             e.preventDefault();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const scrollable = document.querySelector('.content-scrollable');
+            if (scrollable) {
+              scrollable.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            if (onNavigateMobile) onNavigateMobile();
           }}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}>
             <path d="m18 15-6-6-6 6"/>
           </svg>
           Top
@@ -41,13 +52,17 @@ const Sidebar = ({ sections, onOpenModal, activeSectionId, onScrollToSection }) 
             onClick={(e) => {
               e.preventDefault();
               onScrollToSection(idx);
+              if (onNavigateMobile) onNavigateMobile();
             }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', opacity: 0.7 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', opacity: 0.7, flexShrink: 0 }}>
               <path d="M4 22V4c0-.5.2-1 .6-1.4C5 2.2 5.5 2 6 2h8l6 6v14c0 .5-.2 1-.6 1.4-.4.4-.9.6-1.4.6H6c-.5 0-1-.2-1.4-.6-.4-.4-.6-.9-.6-1.4Z"></path>
               <path d="M14 2v6h6"></path>
             </svg>
-            {sec.sectionName}
+            <span className="nav-link-name">{sec.sectionName}</span>
+            {sec.sectionButtons && sec.sectionButtons.length > 0 && (
+              <span className="nav-count-pill">{sec.sectionButtons.length}</span>
+            )}
           </a>
         ))}
       </div>

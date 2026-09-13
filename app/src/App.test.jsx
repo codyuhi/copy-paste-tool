@@ -160,4 +160,62 @@ describe('Chat Agent Tool - Integration Tests', () => {
     const favoritesPanel = screen.getByText('Favorites Pane').closest('aside');
     expect(screen.getByText('Home Page', { selector: '.fav-item-name' })).toBeInTheDocument();
   });
+
+  it('switches mobile navigation tabs seamlessly', async () => {
+    const { container } = render(<App />);
+
+    // Bottom nav is present
+    expect(screen.getByRole('navigation', { name: 'Mobile Navigation' })).toBeInTheDocument();
+    const appContainer = container.querySelector('.app-container');
+    expect(appContainer).toHaveClass('tab-snippets');
+
+    // Switch to sections tab
+    fireEvent.click(screen.getByRole('button', { name: 'Sections' }));
+    expect(appContainer).toHaveClass('tab-sections');
+
+    // Switch to favorites tab
+    fireEvent.click(screen.getByRole('button', { name: 'Favorites' }));
+    expect(appContainer).toHaveClass('tab-favorites');
+
+    // Switch back to snippets tab
+    fireEvent.click(screen.getByRole('button', { name: 'Snippets' }));
+    expect(appContainer).toHaveClass('tab-snippets');
+  });
+
+  it('opens snippet options menu via touch more button and removes favorite with direct action', async () => {
+    render(<App />);
+
+    // Create section and button
+    fireEvent.click(screen.getByText('Create Section'));
+    fireEvent.change(screen.getByLabelText('Section Name'), { target: { value: 'Customer Service' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    fireEvent.click(screen.getByText('Add Button'));
+    fireEvent.change(screen.getByLabelText('Button Name'), { target: { value: 'Refund Policy' } });
+    fireEvent.change(screen.getByLabelText('Paste Value'), { target: { value: 'Refunds within 30 days.' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Open options via snippet more button (3-dots)
+    const moreBtn = screen.getByRole('button', { name: 'Options for Refund Policy' });
+    expect(moreBtn).toBeInTheDocument();
+    fireEvent.click(moreBtn);
+
+    // Favorite via context menu
+    const favOption = screen.getByText('Favorite');
+    fireEvent.click(favOption);
+
+    // Verify it is in favorites pane
+    expect(screen.getByText('Refund Policy', { selector: '.fav-item-name' })).toBeInTheDocument();
+
+    // Now remove favorite directly using the touch remove button
+    const removeBtn = screen.getByRole('button', { name: 'Remove Refund Policy from favorites' });
+    expect(removeBtn).toBeInTheDocument();
+    fireEvent.click(removeBtn);
+
+    // Confirm it's removed and empty state shows
+    await waitFor(() => {
+      expect(screen.queryByText('Refund Policy', { selector: '.fav-item-name' })).not.toBeInTheDocument();
+      expect(screen.getByText('No Favorites Added Yet')).toBeInTheDocument();
+    });
+  });
 });

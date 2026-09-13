@@ -12,6 +12,9 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Mobile Tab State: 'snippets' | 'sections' | 'favorites'
+  const [mobileTab, setMobileTab] = useState('snippets');
+
   // Modal / Selection States
   const [activeModal, setActiveModal] = useState(null); // 'section-add' | 'button-add' | 'button-edit' | 'settings' | 'import' | 'export' | 'reorder-sections'
   const [activeSectionIdx, setActiveSectionIdx] = useState(null);
@@ -219,7 +222,6 @@ function App() {
 
   // Reorder Sections
   const handleReorderSections = (newSections) => {
-    // If we transition to reorder modal, we save the new list
     setSections(newSections);
     saveSections(newSections);
 
@@ -257,19 +259,22 @@ function App() {
 
   // Scroll to section element smoothly
   const handleScrollToSection = (idx) => {
-    const el = document.getElementById(`section-${idx}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-      setActiveSectionId(`section-${idx}`);
-    }
+    setMobileTab('snippets');
+    setTimeout(() => {
+      const el = document.getElementById(`section-${idx}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        setActiveSectionId(`section-${idx}`);
+      }
+    }, 50);
   };
 
   // Context Menu Trigger Hook
   const handleContextMenuTrigger = (e, type, data) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x: e?.clientX ?? (window.innerWidth / 2),
+      y: e?.clientY ?? (window.innerHeight / 2),
       visible: true,
       type,
       data
@@ -302,7 +307,7 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container tab-${mobileTab}`}>
       {/* Header Banner */}
       <header className="app-header">
         <div className="header-left">
@@ -310,6 +315,7 @@ function App() {
             className="settings-btn" 
             onClick={() => setActiveModal('settings')}
             title="Open Menu"
+            aria-label="Open Settings Menu"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
@@ -321,7 +327,9 @@ function App() {
         
         <span className="brand-company">company</span>
         
-        <span className="brand-version">Version 2.0.0</span>
+        <div className="header-right">
+          <span className="brand-version">Version 2.0.0</span>
+        </div>
       </header>
 
       {/* Navigation Sidebar */}
@@ -330,6 +338,7 @@ function App() {
         onOpenModal={setActiveModal}
         activeSectionId={activeSectionId}
         onScrollToSection={handleScrollToSection}
+        onNavigateMobile={() => setMobileTab('snippets')}
       />
 
       {/* Central Content Panel */}
@@ -342,6 +351,7 @@ function App() {
         onOpenModal={setActiveModal}
         onDeleteSection={handleDeleteSection}
         onSetActiveSection={setActiveSectionIdx}
+        onNavigateToSections={() => setMobileTab('sections')}
       />
 
       {/* Favorites Sidebar */}
@@ -349,9 +359,70 @@ function App() {
         favorites={favorites}
         onCopy={handleCopy}
         onContextMenu={handleContextMenuTrigger}
+        onRemoveFavorite={handleRemoveFavorite}
       />
 
-      {/* Custom Right-Click Context Menu Overlay */}
+      {/* Mobile Bottom Navigation Bar (Visible on screens < 1024px) */}
+      <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+        <button
+          className={`mobile-nav-tab ${mobileTab === 'snippets' ? 'active' : ''}`}
+          onClick={() => setMobileTab('snippets')}
+          type="button"
+          aria-label="Snippets"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+          </svg>
+          <span>Snippets</span>
+        </button>
+
+        <button
+          className={`mobile-nav-tab ${mobileTab === 'sections' ? 'active' : ''}`}
+          onClick={() => setMobileTab('sections')}
+          type="button"
+          aria-label="Sections"
+        >
+          <div className="mobile-tab-icon-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 22V4c0-.5.2-1 .6-1.4C5 2.2 5.5 2 6 2h8l6 6v14c0 .5-.2 1-.6 1.4-.4.4-.9.6-1.4.6H6c-.5 0-1-.2-1.4-.6-.4-.4-.6-.9-.6-1.4Z"></path>
+              <path d="M14 2v6h6"></path>
+            </svg>
+            {sections.length > 0 && <span className="mobile-tab-counter">{sections.length}</span>}
+          </div>
+          <span>Sections</span>
+        </button>
+
+        <button
+          className={`mobile-nav-tab ${mobileTab === 'favorites' ? 'active' : ''}`}
+          onClick={() => setMobileTab('favorites')}
+          type="button"
+          aria-label="Favorites"
+        >
+          <div className="mobile-tab-icon-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            {favorites.length > 0 && <span className="mobile-tab-counter">{favorites.length}</span>}
+          </div>
+          <span>Favorites</span>
+        </button>
+
+        <button
+          className="mobile-nav-tab"
+          onClick={() => setActiveModal('settings')}
+          type="button"
+          aria-label="Menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Menu</span>
+        </button>
+      </nav>
+
+      {/* Custom Right-Click Context Menu / Mobile Action Sheet */}
       <ContextMenu 
         x={contextMenu.x}
         y={contextMenu.y}
