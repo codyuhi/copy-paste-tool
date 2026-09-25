@@ -5,6 +5,7 @@ import FavoritesPane from './components/FavoritesPane';
 import ContextMenu from './components/ContextMenu';
 import Modals from './components/Modals';
 import { loadSections, saveSections, loadFavorites, saveFavorites } from './utils/storage';
+import ThemeToggle from './components/ThemeToggle';
 
 function App() {
   // App States
@@ -329,6 +330,7 @@ function App() {
         
         <div className="header-right">
           <span className="brand-version">Version 2.0.0</span>
+          <ThemeToggle />
         </div>
       </header>
 

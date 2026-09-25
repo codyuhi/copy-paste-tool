@@ -13,9 +13,7 @@ const Modals = ({
   onImportData,
   onClearAll
 }) => {
-  if (!activeModal) return null;
-
-  // Local Form States
+  // Local Form States (hooks must run on every render, before any early return)
   const [sectionName, setSectionName] = useState('');
   const [buttonName, setButtonName] = useState('');
   const [pasteValue, setPasteValue] = useState('');
@@ -48,6 +46,8 @@ const Modals = ({
       setAllExportSelected(false);
     }
   }, [activeModal, sections, activeButtonCoords]);
+
+  if (!activeModal) return null;
 
   // Form Submit Handlers
   const handleAddSectionSubmit = (e) => {
@@ -178,7 +178,7 @@ const Modals = ({
           left: 0,
           width: '100%',
           height: '100%',
-          backgroundColor: 'rgba(5, 8, 16, 0.8)',
+          backgroundColor: 'var(--overlay)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)'
         }}
