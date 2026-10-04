@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import FavoritesPane from './components/FavoritesPane';
 import ContextMenu from './components/ContextMenu';
 import Modals from './components/Modals';
+import AuthModal from './components/AuthModal';
 import { loadSections, saveSections, loadFavorites, saveFavorites } from './utils/storage';
+import { getAuthToken, getStoredUser, apiGetMe, apiFetchUserData, apiSaveUserData, apiLogout } from './utils/api';
 import ThemeToggle from './components/ThemeToggle';
 
 function App() {
@@ -13,6 +15,12 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Auth & Cloud Sync States
+  const [user, setUser] = useState(() => getStoredUser());
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const syncTimeoutRef = useRef(null);
+
   // Mobile Tab State: 'snippets' | 'sections' | 'favorites'
   const [mobileTab, setMobileTab] = useState('snippets');
 
@@ -37,10 +45,93 @@ function App() {
   // Active Section navigation tracker (highlight sidebar item based on scroll/click)
   const [activeSectionId, setActiveSectionId] = useState('top');
 
-  // Load initial state
+  // Helper to persist locally and sync to server if authenticated
+  const saveAndSync = useCallback(async (newSections, newFavorites) => {
+    saveSections(newSections);
+    saveFavorites(newFavorites);
+
+    if (getAuthToken()) {
+      setSyncStatus('saving');
+      try {
+        await apiSaveUserData(newSections, newFavorites);
+        setSyncStatus('saved');
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = setTimeout(() => setSyncStatus('idle'), 2500);
+      } catch (err) {
+        console.error('Failed to sync to server:', err);
+        setSyncStatus('error');
+      }
+    }
+  }, []);
+
+  // Load initial state and verify session
   useEffect(() => {
     setSections(loadSections());
     setFavorites(loadFavorites());
+
+    const initAuthAndSync = async () => {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const currentUser = await apiGetMe();
+        if (currentUser) {
+          setUser(currentUser);
+          const data = await apiFetchUserData();
+          if (data && (data.sections?.length > 0 || data.favorites?.length > 0)) {
+            setSections(data.sections || []);
+            setFavorites(data.favorites || []);
+            saveSections(data.sections || []);
+            saveFavorites(data.favorites || []);
+          } else {
+            // If account is new/empty, migrate current local snippets to server
+            const localSec = loadSections();
+            const localFav = loadFavorites();
+            if (localSec.length > 0 || localFav.length > 0) {
+              await apiSaveUserData(localSec, localFav);
+            }
+          }
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        console.warn('Initial session sync failed:', err);
+      }
+    };
+
+    initAuthAndSync();
+  }, []);
+
+  // Auto-sync when returning to tab / switching devices
+  useEffect(() => {
+    const handleVisibilitySync = async () => {
+      if (!getAuthToken()) return;
+      try {
+        const data = await apiFetchUserData();
+        if (data?.sections) {
+          setSections(data.sections);
+          setFavorites(data.favorites || []);
+          saveSections(data.sections);
+          saveFavorites(data.favorites || []);
+        }
+      } catch (err) {
+        console.warn('Background sync error:', err);
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilitySync);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleVisibilitySync();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilitySync);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
   }, []);
 
   // Display Toast Notification
@@ -88,7 +179,7 @@ function App() {
   const handleAddSection = (name) => {
     const updated = [...sections, { sectionName: name, sectionButtons: [] }];
     setSections(updated);
-    saveSections(updated);
+    saveAndSync(updated, favorites);
     showToast(`Created section "${name}"`);
   };
 
@@ -97,7 +188,6 @@ function App() {
     if (confirm(`Are you sure you want to delete the section "${sec.sectionName}" and all of its buttons?`)) {
       const updated = sections.filter((_, idx) => idx !== index);
       setSections(updated);
-      saveSections(updated);
 
       // Splicing elements can shift indices. Adjust favorites pointing to subsequent indexes
       const filteredFavs = favorites.filter(fav => fav.sectionId !== index);
@@ -108,7 +198,7 @@ function App() {
         return fav;
       });
       setFavorites(adjustedFavs);
-      saveFavorites(adjustedFavs);
+      saveAndSync(updated, adjustedFavs);
 
       showToast(`Deleted section "${sec.sectionName}"`);
     }
@@ -126,7 +216,7 @@ function App() {
       return sec;
     });
     setSections(updated);
-    saveSections(updated);
+    saveAndSync(updated, favorites);
     showToast(`Created button "${buttonName}"`);
   };
 
@@ -144,7 +234,6 @@ function App() {
       return sec;
     });
     setSections(updated);
-    saveSections(updated);
 
     // Sync edited fields inside Favorites
     const updatedFavs = favorites.map(fav => {
@@ -154,7 +243,7 @@ function App() {
       return fav;
     });
     setFavorites(updatedFavs);
-    saveFavorites(updatedFavs);
+    saveAndSync(updated, updatedFavs);
 
     showToast(`Updated button "${buttonName}"`);
   };
@@ -172,7 +261,6 @@ function App() {
         return sec;
       });
       setSections(updated);
-      saveSections(updated);
 
       // Clean up favorites and adjust indices of shifted buttons
       const filteredFavs = favorites.filter(fav => !(fav.sectionId === sectionIdx && fav.buttonId === buttonIdx));
@@ -183,7 +271,7 @@ function App() {
         return fav;
       });
       setFavorites(adjustedFavs);
-      saveFavorites(adjustedFavs);
+      saveAndSync(updated, adjustedFavs);
 
       showToast(`Deleted button "${btn.buttonName}"`);
     }
@@ -208,7 +296,7 @@ function App() {
 
     const updated = [...favorites, newFav];
     setFavorites(updated);
-    saveFavorites(updated);
+    saveAndSync(sections, updated);
     showToast(`Added "${btn.buttonName}" to Favorites!`);
   };
 
@@ -217,14 +305,13 @@ function App() {
     if (!fav) return;
     const updated = favorites.filter((_, idx) => idx !== favIdx);
     setFavorites(updated);
-    saveFavorites(updated);
+    saveAndSync(sections, updated);
     showToast(`Removed "${fav.buttonName}" from Favorites`);
   };
 
   // Reorder Sections
   const handleReorderSections = (newSections) => {
     setSections(newSections);
-    saveSections(newSections);
 
     // Sync favorite mappings to new section positions
     const adjustedFavs = favorites.map(fav => {
@@ -236,7 +323,7 @@ function App() {
       return fav;
     });
     setFavorites(adjustedFavs);
-    saveFavorites(adjustedFavs);
+    saveAndSync(newSections, adjustedFavs);
 
     showToast('Sections reordered successfully!');
   };
@@ -245,7 +332,7 @@ function App() {
   const handleImportData = (importedSections) => {
     const updated = [...sections, ...importedSections];
     setSections(updated);
-    saveSections(updated);
+    saveAndSync(updated, favorites);
     showToast(`Successfully imported ${importedSections.length} sections!`);
   };
 
@@ -253,9 +340,39 @@ function App() {
   const handleClearAll = () => {
     setSections([]);
     setFavorites([]);
-    saveSections([]);
-    saveFavorites([]);
+    saveAndSync([], []);
     showToast('All sections and favorites deleted.');
+  };
+
+  // Auth Success Handler
+  const handleAuthSuccess = async (newUser, initialData) => {
+    setUser(newUser);
+    if (initialData?.initialSections && initialData.initialSections.length > 0) {
+      setSections(initialData.initialSections);
+      setFavorites(initialData.initialFavorites || []);
+      saveSections(initialData.initialSections);
+      saveFavorites(initialData.initialFavorites || []);
+    } else {
+      try {
+        const data = await apiFetchUserData();
+        if (data?.sections) {
+          setSections(data.sections);
+          setFavorites(data.favorites || []);
+          saveSections(data.sections);
+          saveFavorites(data.favorites || []);
+        }
+      } catch (err) {
+        console.error('Failed to load user data on login:', err);
+      }
+    }
+  };
+
+  // Sign out Handler
+  const handleLogout = async () => {
+    await apiLogout();
+    setUser(null);
+    setSyncStatus('idle');
+    showToast('Signed out successfully');
   };
 
   // Scroll to section element smoothly
@@ -329,6 +446,79 @@ function App() {
         <span className="brand-company">company</span>
         
         <div className="header-right">
+          {user && (
+            <div className={`sync-indicator ${syncStatus}`} title="Cloud Sync Status">
+              {syncStatus === 'saving' && (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              )}
+              {syncStatus === 'saved' && (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span>Saved</span>
+                </>
+              )}
+              {syncStatus === 'error' && (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  <span>Offline</span>
+                </>
+              )}
+              {syncStatus === 'idle' && (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
+                  </svg>
+                  <span>Synced</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {user ? (
+            <>
+              <div className="user-badge" title={`Signed in as ${user.username}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>{user.username}</span>
+              </div>
+              <button 
+                className="btn-auth-logout" 
+                onClick={handleLogout}
+                title="Sign Out"
+                aria-label="Sign Out"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <button 
+              className="btn-auth-signin" 
+              onClick={() => setIsAuthModalOpen(true)}
+              title="Sign In / Register"
+              aria-label="Sign In"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                <polyline points="10 17 15 12 10 7"></polyline>
+                <line x1="15" y1="12" x2="3" y2="12"></line>
+              </svg>
+              <span>Sign In</span>
+            </button>
+          )}
+
           <span className="brand-version">Version 2.0.0</span>
           <ThemeToggle />
         </div>
@@ -448,6 +638,19 @@ function App() {
         onReorderSections={handleReorderSections}
         onImportData={handleImportData}
         onClearAll={handleClearAll}
+        user={user}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
+      />
+
+      {/* User Authentication & Registration Modal */}
+      <AuthModal 
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+        localSections={sections}
+        localFavorites={favorites}
+        showToast={showToast}
       />
 
       {/* Floating Snackbar Toast */}

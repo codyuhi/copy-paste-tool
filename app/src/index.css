@@ -195,6 +195,91 @@ button, a, input, textarea {
   font-weight: 500;
 }
 
+/* User & Sync Indicators */
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.sync-indicator.saving {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+.sync-indicator.saved {
+  color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 12%, transparent);
+}
+
+.sync-indicator.error {
+  color: var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+}
+
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-emphasis);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-auth-signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--accent-color);
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-auth-signin:hover {
+  background: var(--accent-hover);
+}
+
+.btn-auth-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-auth-logout:hover {
+  background: var(--bg-hover);
+  color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+
 /* ==========================================================================
    Side Navigation Pane
    ========================================================================== */

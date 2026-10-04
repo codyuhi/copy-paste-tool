@@ -11,7 +11,10 @@ const Modals = ({
   activeButtonCoords,
   onReorderSections,
   onImportData,
-  onClearAll
+  onClearAll,
+  user,
+  onOpenAuth,
+  onLogout
 }) => {
   // Local Form States (hooks must run on every render, before any early return)
   const [sectionName, setSectionName] = useState('');
@@ -297,6 +300,62 @@ const Modals = ({
         {/* 4. Settings Dashboard */}
         {activeModal === 'settings' && (
           <div className="settings-menu">
+            <div className="settings-section">
+              <div className="settings-sec-title">Account & Synchronization</div>
+              {user ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>Signed in as <strong>{user.username}</strong></span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Your snippets and favorites are saved to the server and synchronized across all your devices.
+                  </div>
+                  <button 
+                    type="button"
+                    className="btn btn-cancel" 
+                    style={{ width: '100%', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    onClick={() => {
+                      onClose();
+                      onLogout();
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                      <polyline points="16 17 21 12 16 7"></polyline>
+                      <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    You are in Guest mode with local browser storage. Sign in or create an account to save your snippets to the server and access them across devices.
+                  </div>
+                  <button 
+                    type="button"
+                    className="btn btn-primary" 
+                    style={{ width: '100%', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    onClick={() => {
+                      onClose();
+                      onOpenAuth();
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                      <polyline points="10 17 15 12 10 7"></polyline>
+                      <line x1="15" y1="12" x2="3" y2="12"></line>
+                    </svg>
+                    Sign In / Create Account
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="settings-section">
               <div className="settings-sec-title">Reorder Controls</div>
               <button 

@@ -46,3 +46,44 @@ jobs:
           dockerfile: "Dockerfile"
           ignore: DL3008,DL3018,DL3013
         continue-on-error: true
+
+  backend-test:
+    name: Go Backend Tests & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run Go Tests
+        run: |
+          cd backend
+          go test -v ./...
+          go build ./cmd/server
+
+  frontend-test:
+    name: React Frontend Tests & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: |
+          cd app
+          npm ci
+
+      - name: Run Tests & Build
+        run: |
+          cd app
+          npm test
+          npm run build
