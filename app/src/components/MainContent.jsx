@@ -9,7 +9,7 @@ const MainContent = ({
   onOpenModal,
   onDeleteSection,
   onSetActiveSection,
-  onNavigateToSections
+  _onNavigateToSections
 }) => {
   const [copiedKey, setCopiedKey] = useState(null);
   const touchTimerRef = useRef(null);

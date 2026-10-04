@@ -4,7 +4,7 @@ import MainContent from './components/MainContent';
 import FavoritesPane from './components/FavoritesPane';
 import ContextMenu from './components/ContextMenu';
 import Modals from './components/Modals';
-import AuthModal from './components/AuthModal';
+import AuthView from './components/AuthView';
 import { loadSections, saveSections, loadFavorites, saveFavorites } from './utils/storage';
 import { getAuthToken, getStoredUser, apiGetMe, apiFetchUserData, apiSaveUserData, apiLogout } from './utils/api';
 import ThemeToggle from './components/ThemeToggle';
@@ -18,7 +18,6 @@ function App() {
   // Auth & Cloud Sync States
   const [user, setUser] = useState(() => getStoredUser());
   const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const syncTimeoutRef = useRef(null);
 
   // Mobile Tab State: 'snippets' | 'sections' | 'favorites'
@@ -424,6 +423,23 @@ function App() {
     }
   };
 
+  // Gate unauthenticated visitors with centered Auth screen
+  if (!user) {
+    return (
+      <div className="app-container">
+        <AuthView 
+          onSuccess={handleAuthSuccess}
+          localSections={sections}
+          localFavorites={favorites}
+          showToast={showToast}
+        />
+        <div className={`toast ${toast.visible ? 'show' : ''}`}>
+          {toast.message}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-container tab-${mobileTab}`}>
       {/* Header Banner */}
@@ -443,83 +459,61 @@ function App() {
           <span className="brand-title">Chat Agent Tool</span>
         </div>
         
-        <span className="brand-company">company</span>
-        
         <div className="header-right">
-          {user && (
-            <div className={`sync-indicator ${syncStatus}`} title="Cloud Sync Status">
-              {syncStatus === 'saving' && (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-                  </svg>
-                  <span>Saving...</span>
-                </>
-              )}
-              {syncStatus === 'saved' && (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                  <span>Saved</span>
-                </>
-              )}
-              {syncStatus === 'error' && (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                  <span>Offline</span>
-                </>
-              )}
-              {syncStatus === 'idle' && (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
-                  </svg>
-                  <span>Synced</span>
-                </>
-              )}
-            </div>
-          )}
-
-          {user ? (
-            <>
-              <div className="user-badge" title={`Signed in as ${user.username}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
+          <div className={`sync-indicator ${syncStatus}`} title="Cloud Sync Status">
+            {syncStatus === 'saving' && (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
                 </svg>
-                <span>{user.username}</span>
-              </div>
-              <button 
-                className="btn-auth-logout" 
-                onClick={handleLogout}
-                title="Sign Out"
-                aria-label="Sign Out"
-              >
-                Sign Out
-              </button>
-            </>
-          ) : (
-            <button 
-              className="btn-auth-signin" 
-              onClick={() => setIsAuthModalOpen(true)}
-              title="Sign In / Register"
-              aria-label="Sign In"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-                <polyline points="10 17 15 12 10 7"></polyline>
-                <line x1="15" y1="12" x2="3" y2="12"></line>
-              </svg>
-              <span>Sign In</span>
-            </button>
-          )}
+                <span>Saving...</span>
+              </>
+            )}
+            {syncStatus === 'saved' && (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Saved</span>
+              </>
+            )}
+            {syncStatus === 'error' && (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Offline</span>
+              </>
+            )}
+            {syncStatus === 'idle' && (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
+                </svg>
+                <span>Synced</span>
+              </>
+            )}
+          </div>
 
-          <span className="brand-version">Version 2.0.0</span>
+          <div className="user-badge" title={`Signed in as ${user.username}`}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>{user.username}</span>
+          </div>
+          <button 
+            className="btn-auth-logout" 
+            onClick={handleLogout}
+            title="Sign Out"
+            aria-label="Sign Out"
+          >
+            Sign Out
+          </button>
+
+          <span className="brand-version">Version 2.0.1</span>
           <ThemeToggle />
         </div>
       </header>
@@ -639,18 +633,7 @@ function App() {
         onImportData={handleImportData}
         onClearAll={handleClearAll}
         user={user}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
-      />
-
-      {/* User Authentication & Registration Modal */}
-      <AuthModal 
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={handleAuthSuccess}
-        localSections={sections}
-        localFavorites={favorites}
-        showToast={showToast}
       />
 
       {/* Floating Snackbar Toast */}

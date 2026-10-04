@@ -4,8 +4,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import App from './App';
 
 describe('Chat Agent Tool - Integration Tests', () => {
+  const mockUser = { id: 'user-1', username: 'cody' };
+
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem('cpt_auth_token', 'mock-token');
+    localStorage.setItem('cpt_user', JSON.stringify(mockUser));
     vi.clearAllMocks();
   });
 
@@ -218,36 +222,32 @@ describe('Chat Agent Tool - Integration Tests', () => {
     });
   });
 
-  it('opens and closes the authentication modal', async () => {
+  it('renders authentication gate when unauthenticated and prevents access', () => {
+    localStorage.clear();
     render(<App />);
 
-    // Click Sign In button in header
-    const signInBtn = screen.getByRole('button', { name: 'Sign In' });
-    expect(signInBtn).toBeInTheDocument();
-    fireEvent.click(signInBtn);
-
-    // Verify modal appears
     expect(screen.getByText('Sign In to Your Account')).toBeInTheDocument();
+    expect(screen.getByText('Sign in to access your synchronized snippets across all devices.')).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
-
-    // Switch to Create Account tab
-    const createAccountTab = screen.getByRole('button', { name: 'Create Account' });
-    fireEvent.click(createAccountTab);
-    expect(screen.getByText('Confirm Password')).toBeInTheDocument();
-
-    // Click Continue as Guest / Cancel to dismiss
-    const guestBtn = screen.getByRole('button', { name: 'Continue as Guest' });
-    fireEvent.click(guestBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Sign In to Your Account')).not.toBeInTheDocument();
-    });
+    expect(screen.queryByText('Create Section')).not.toBeInTheDocument();
   });
 
-  it('supports login, displays user badge, and logs out', async () => {
-    // Mock global fetch
-    global.fetch = vi.fn().mockImplementation((url, _options) => {
+  it('switches between Sign In and Create Account on the auth gate', () => {
+    localStorage.clear();
+    render(<App />);
+
+    // Click Create Account tab
+    const createAccountTab = screen.getByRole('button', { name: 'Create Account' });
+    fireEvent.click(createAccountTab);
+
+    expect(screen.getByText('Create an Account')).toBeInTheDocument();
+    expect(screen.getByLabelText('Confirm Password')).toBeInTheDocument();
+  });
+
+  it('supports login from auth gate, displays user badge, and loads cloud data', async () => {
+    localStorage.clear();
+    global.fetch = vi.fn().mockImplementation((url) => {
       if (url.includes('/api/auth/login')) {
         return Promise.resolve({
           ok: true,
@@ -271,21 +271,12 @@ describe('Chat Agent Tool - Integration Tests', () => {
           })
         });
       }
-      if (url.includes('/api/auth/logout')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ success: true })
-        });
-      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
     render(<App />);
 
-    // Click Sign In
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    // Fill form
+    // Fill credentials
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'cody' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
 
@@ -299,13 +290,30 @@ describe('Chat Agent Tool - Integration Tests', () => {
       expect(screen.getByRole('button', { name: 'Sign Out' })).toBeInTheDocument();
       expect(screen.getByText('Cloud Item')).toBeInTheDocument();
     });
+  });
 
-    // Click Sign Out
-    fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
+  it('supports signing out and returning to the auth gate', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/auth/logout')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true })
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
 
+    render(<App />);
+
+    // Expect logged-in header with Sign Out button
+    const signOutBtn = screen.getByRole('button', { name: 'Sign Out' });
+    expect(signOutBtn).toBeInTheDocument();
+    fireEvent.click(signOutBtn);
+
+    // Should return to auth gate
     await waitFor(() => {
-      expect(screen.queryByText('cody')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
+      expect(screen.getByText('Sign In to Your Account')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sign Out' })).not.toBeInTheDocument();
     });
   });
 });
