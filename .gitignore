@@ -1,6 +1,6 @@
 # Binaries
-server
-backend/server
+/server
+/backend/server
 *.exe
 *.dll
 *.so
@@ -11,8 +11,8 @@ backend/server
 *.db-journal
 *.db-wal
 *.db-shm
-data/
-backend/data/
+/data/
+/backend/data/
 
 # Node
 node_modules/
