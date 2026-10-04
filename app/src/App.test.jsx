@@ -316,4 +316,52 @@ describe('Chat Agent Tool - Integration Tests', () => {
       expect(screen.queryByRole('button', { name: 'Sign Out' })).not.toBeInTheDocument();
     });
   });
+
+  it('preserves drafted button input when window refocuses or background sync occurs', async () => {
+    sessionStorage.clear();
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/data')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            sections: [
+              {
+                sectionName: 'Work Tools',
+                sectionButtons: []
+              }
+            ],
+            favorites: []
+          })
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(<App />);
+
+    // Create section
+    fireEvent.click(screen.getByText('Create Section'));
+    fireEvent.change(screen.getByLabelText('Section Name'), { target: { value: 'Work Tools' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Open Add Button modal
+    fireEvent.click(screen.getByText('Add Button'));
+
+    // Fill in button draft
+    const nameInput = screen.getByLabelText('Button Name');
+    const pasteInput = screen.getByLabelText('Paste Value');
+    fireEvent.change(nameInput, { target: { value: 'API Access Token' } });
+    fireEvent.change(pasteInput, { target: { value: 'bearer-token-12345' } });
+
+    expect(nameInput.value).toBe('API Access Token');
+    expect(pasteInput.value).toBe('bearer-token-12345');
+
+    // Simulate leaving and returning to window (window focus / visibilitychange)
+    window.dispatchEvent(new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    // Verify draft input was NOT wiped out
+    expect(nameInput.value).toBe('API Access Token');
+    expect(pasteInput.value).toBe('bearer-token-12345');
+  });
 });

@@ -73,7 +73,7 @@ const AuthView = ({
           <span className="brand-title">Chat Agent Tool</span>
         </div>
         <div className="header-right">
-          <span className="brand-version">Version 2.0.1</span>
+          <span className="brand-version">Version 2.0.2</span>
           <ThemeToggle />
         </div>
       </header>

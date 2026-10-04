@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const Modals = ({
   activeModal,
@@ -23,31 +23,74 @@ const Modals = ({
   const [exportSelections, setExportSelections] = useState({});
   const [allExportSelected, setAllExportSelected] = useState(false);
 
-  // Initialize form fields when modal opens
+  const prevModalRef = useRef(null);
+  const prevSectionIdxRef = useRef(null);
+  const prevCoordsRef = useRef(null);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+
+  // Initialize form fields ONLY when a modal is newly opened or target item changes
   useEffect(() => {
-    if (activeModal === 'section-add') {
-      setSectionName('');
-    } else if (activeModal === 'button-add') {
-      setButtonName('');
-      setPasteValue('');
-    } else if (activeModal === 'button-edit' && activeButtonCoords) {
-      const { sectionIdx, buttonIdx } = activeButtonCoords;
-      const btn = sections[sectionIdx]?.sectionButtons[buttonIdx];
-      if (btn) {
-        setButtonName(btn.buttonName);
-        setPasteValue(btn.pasteValue);
+    const isNewModal = activeModal !== prevModalRef.current;
+    const isNewSection = activeSectionIdx !== prevSectionIdxRef.current;
+    const isNewCoords = (
+      activeButtonCoords?.sectionIdx !== prevCoordsRef.current?.sectionIdx ||
+      activeButtonCoords?.buttonIdx !== prevCoordsRef.current?.buttonIdx
+    );
+
+    if (activeModal && (isNewModal || (activeModal === 'button-add' && isNewSection) || (activeModal === 'button-edit' && isNewCoords))) {
+      if (activeModal === 'section-add') {
+        setSectionName('');
+      } else if (activeModal === 'button-add') {
+        const draftKey = `cpt_draft_btn_${activeSectionIdx}`;
+        const draft = sessionStorage.getItem(draftKey);
+        if (draft) {
+          try {
+            const parsed = JSON.parse(draft);
+            setButtonName(parsed.buttonName || '');
+            setPasteValue(parsed.pasteValue || '');
+          } catch {
+            setButtonName('');
+            setPasteValue('');
+          }
+        } else {
+          setButtonName('');
+          setPasteValue('');
+        }
+      } else if (activeModal === 'button-edit' && activeButtonCoords) {
+        const { sectionIdx, buttonIdx } = activeButtonCoords;
+        const btn = sectionsRef.current[sectionIdx]?.sectionButtons[buttonIdx];
+        if (btn) {
+          setButtonName(btn.buttonName);
+          setPasteValue(btn.pasteValue);
+        }
+      } else if (activeModal === 'reorder-sections') {
+        setTempSections([...sectionsRef.current]);
+      } else if (activeModal === 'export') {
+        const initialSelections = {};
+        sectionsRef.current.forEach((_, idx) => {
+          initialSelections[idx] = false;
+        });
+        setExportSelections(initialSelections);
+        setAllExportSelected(false);
       }
-    } else if (activeModal === 'reorder-sections') {
-      setTempSections([...sections]);
-    } else if (activeModal === 'export') {
-      const initialSelections = {};
-      sections.forEach((_, idx) => {
-        initialSelections[idx] = false;
-      });
-      setExportSelections(initialSelections);
-      setAllExportSelected(false);
     }
-  }, [activeModal, sections, activeButtonCoords]);
+
+    prevModalRef.current = activeModal;
+    prevSectionIdxRef.current = activeSectionIdx;
+    prevCoordsRef.current = activeButtonCoords;
+  }, [activeModal, activeSectionIdx, activeButtonCoords]);
+
+  // Persist draft for active button addition so it survives window switching or background syncs
+  useEffect(() => {
+    if (activeModal === 'button-add' && activeSectionIdx !== null) {
+      if (buttonName || pasteValue) {
+        sessionStorage.setItem(`cpt_draft_btn_${activeSectionIdx}`, JSON.stringify({ buttonName, pasteValue }));
+      } else {
+        sessionStorage.removeItem(`cpt_draft_btn_${activeSectionIdx}`);
+      }
+    }
+  }, [activeModal, activeSectionIdx, buttonName, pasteValue]);
 
   if (!activeModal) return null;
 
@@ -62,7 +105,17 @@ const Modals = ({
   const handleAddButtonSubmit = (e) => {
     e.preventDefault();
     if (!buttonName.trim() || !pasteValue.trim()) return;
+    sessionStorage.removeItem(`cpt_draft_btn_${activeSectionIdx}`);
     onAddButton(activeSectionIdx, buttonName.trim(), pasteValue);
+    setButtonName('');
+    setPasteValue('');
+    onClose();
+  };
+
+  const handleCancelAddButton = () => {
+    sessionStorage.removeItem(`cpt_draft_btn_${activeSectionIdx}`);
+    setButtonName('');
+    setPasteValue('');
     onClose();
   };
 
@@ -258,7 +311,7 @@ const Modals = ({
               />
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-cancel" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn btn-cancel" onClick={handleCancelAddButton}>Cancel</button>
               <button type="submit" className="btn btn-primary">Submit</button>
             </div>
           </form>

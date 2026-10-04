@@ -101,6 +101,11 @@ function App() {
     initAuthAndSync();
   }, []);
 
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+  const favoritesRef = useRef(favorites);
+  favoritesRef.current = favorites;
+
   // Auto-sync when returning to tab / switching devices
   useEffect(() => {
     const handleVisibilitySync = async () => {
@@ -108,10 +113,18 @@ function App() {
       try {
         const data = await apiFetchUserData();
         if (data?.sections) {
-          setSections(data.sections);
-          setFavorites(data.favorites || []);
-          saveSections(data.sections);
-          saveFavorites(data.favorites || []);
+          const curSec = JSON.stringify(sectionsRef.current);
+          const newSec = JSON.stringify(data.sections);
+          if (curSec !== newSec) {
+            setSections(data.sections);
+            saveSections(data.sections);
+          }
+          const curFav = JSON.stringify(favoritesRef.current);
+          const newFav = JSON.stringify(data.favorites || []);
+          if (curFav !== newFav) {
+            setFavorites(data.favorites || []);
+            saveFavorites(data.favorites || []);
+          }
         }
       } catch (err) {
         console.warn('Background sync error:', err);
@@ -513,7 +526,7 @@ function App() {
             Sign Out
           </button>
 
-          <span className="brand-version">Version 2.0.1</span>
+          <span className="brand-version">Version 2.0.2</span>
           <ThemeToggle />
         </div>
       </header>
