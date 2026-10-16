@@ -1,0 +1,96 @@
+package online.codyuhi.copypastetool.ui.theme
+
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+
+@Immutable
+data class CedarColors(
+    val canvas: Color,
+    val surface: Color,
+    val inset: Color,
+    val elevated: Color,
+    val field: Color,
+    /** Text tiers: ink = emphasis, ink2 = primary, ink3 = secondary, ink4 = muted. */
+    val ink: Color,
+    val ink2: Color,
+    val ink3: Color,
+    val ink4: Color,
+    val line: Color,
+    val lineStrong: Color,
+    val spruce: Color,
+    val spruceHover: Color,
+    val onSpruce: Color,
+    val brand: Color,
+    val rust: Color,
+    val ochre: Color,
+    val juniper: Color,
+    val heather: Color,
+    val okBg: Color,
+    val ok: Color,
+    val warnBg: Color,
+    val warn: Color,
+    val errBg: Color,
+    val err: Color,
+    val dark: Boolean,
+)
+
+val CedarLight = CedarColors(
+    canvas = Color(0xFFEBE7DF),
+    surface = Color(0xFFF5F3EC),
+    inset = Color(0xFFE4DFD4),
+    elevated = Color(0xFFDBD5C7),
+    field = Color(0xFFFFFFFF),
+    ink = Color(0xFF141412),
+    ink2 = Color(0xFF242320),
+    ink3 = Color(0xFF48453D),
+    ink4 = Color(0xFF666257),
+    line = Color(0xFFCDC7BA),
+    lineStrong = Color(0xFFABA496),
+    spruce = Color(0xFF1F513F),
+    spruceHover = Color(0xFF184133),
+    onSpruce = Color(0xFFFAFBF9),
+    brand = Color(0xFF1F513F),
+    rust = Color(0xFFC7370F),
+    ochre = Color(0xFF854714),
+    juniper = Color(0xFF204B67),
+    heather = Color(0xFF70486C),
+    okBg = Color(0xFFD8E8DC),
+    ok = Color(0xFF1F513F),
+    warnBg = Color(0xFFEDE4CE),
+    warn = Color(0xFF854714),
+    errBg = Color(0xFFEDDCD5),
+    err = Color(0xFF811823),
+    dark = false,
+)
+
+val CedarDark = CedarColors(
+    canvas = Color(0xFF161614),
+    surface = Color(0xFF22221F),
+    inset = Color(0xFF1B1B18),
+    elevated = Color(0xFF2D2C28),
+    field = Color(0xFF1A1A18),
+    ink = Color(0xFFFFFFFF),
+    ink2 = Color(0xFFF4F2ED),
+    ink3 = Color(0xFFD5CFC3),
+    ink4 = Color(0xFF9E998E),
+    line = Color(0xFF383630),
+    lineStrong = Color(0xFF545149),
+    spruce = Color(0xFF235C48),
+    spruceHover = Color(0xFF2E745C),
+    onSpruce = Color(0xFFFAFBF9),
+    brand = Color(0xFF48A97C),
+    rust = Color(0xFFE0532B),
+    ochre = Color(0xFFFBBF24),
+    juniper = Color(0xFF8FC1DE),
+    heather = Color(0xFFC89EC4),
+    okBg = Color(0x382E6B34),
+    ok = Color(0xFF4ADE80),
+    warnBg = Color(0x38854714),
+    warn = Color(0xFFFBBF24),
+    errBg = Color(0x38811823),
+    err = Color(0xFFF87171),
+    dark = true,
+)
+
+val LocalCedarColors = staticCompositionLocalOf { CedarLight }

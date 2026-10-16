@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="favorites"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_star"
+        android:shortcutShortLabel="@string/shortcut_favorites">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="online.codyuhi.copypastetool"
+            android:targetClass="online.codyuhi.copypastetool.MainActivity"
+            android:data="copypaste://favorites" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new_snippet"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_new_snippet">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="online.codyuhi.copypastetool"
+            android:targetClass="online.codyuhi.copypastetool.MainActivity"
+            android:data="copypaste://new_snippet" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutShortLabel="@string/shortcut_search">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="online.codyuhi.copypastetool"
+            android:targetClass="online.codyuhi.copypastetool.MainActivity"
+            android:data="copypaste://search" />
+    </shortcut>
+</shortcuts>

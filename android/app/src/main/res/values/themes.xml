@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CopyPasteTool" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/canvas</item>
+    </style>
+    <style name="Theme.CopyPasteTool.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/canvas</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
+        <item name="postSplashScreenTheme">@style/Theme.CopyPasteTool</item>
+    </style>
+</resources>
