@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Copy-Paste Tool</string>
+    <string name="app_name">Uhi-copy-paste-tool</string>
     <string name="tile_label">Copy Snippets</string>
     <string name="shortcut_favorites">Favorites</string>
     <string name="shortcut_new_snippet">New Snippet</string>
