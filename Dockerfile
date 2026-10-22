@@ -27,10 +27,17 @@ RUN mkdir -p /app/data /app/dist
 COPY --from=backend-builder /app/server /app/server
 COPY --from=frontend-builder /build/app/dist /app/dist
 
-ENV PORT=80
+ENV PORT=8080
 ENV DB_PATH=/app/data/copypaste.db
 ENV STATIC_DIR=/app/dist
 
-EXPOSE 80
+EXPOSE 8080
+
+# Run as a fixed non-root user (INFRA-19, PSA restricted). Mounted volumes are
+# made writable by the pod's fsGroup.
+RUN addgroup -S -g 10001 app && adduser -S -D -H -u 10001 -G app -h /app app \
+    && mkdir -p /app/data \
+    && chown -R 10001:10001 /app/data
+USER 10001:10001
 
 CMD ["/app/server"]
