@@ -364,4 +364,160 @@ describe('Chat Agent Tool - Integration Tests', () => {
     expect(nameInput.value).toBe('API Access Token');
     expect(pasteInput.value).toBe('bearer-token-12345');
   });
+
+  it('prompts template variable popover when clicking snippet with placeholders and interpolates clipboard text', async () => {
+    render(<App />);
+
+    // Create section
+    fireEvent.click(screen.getByText('Create Section'));
+    fireEvent.change(screen.getByLabelText('Section Name'), { target: { value: 'DevOps' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Create dynamic template button
+    fireEvent.click(screen.getByText('Add Button'));
+    fireEvent.change(screen.getByLabelText('Button Name'), { target: { value: 'Restart Pod' } });
+    fireEvent.change(screen.getByLabelText('Paste Value'), { target: { value: 'kubectl rollout restart deployment/{{app}} -n {{namespace}}' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Click the template button
+    const copyBtn = await screen.findByText('Restart Pod');
+    fireEvent.click(copyBtn);
+
+    // Verify template modal opens
+    expect(await screen.findByText('Fill Template')).toBeInTheDocument();
+    expect(screen.getByText('Restart Pod', { selector: '.template-snippet-name' })).toBeInTheDocument();
+
+    // Verify inputs for app and namespace
+    const appInput = screen.getByPlaceholderText('Enter app...');
+    const nsInput = screen.getByPlaceholderText('Enter namespace...');
+    expect(appInput).toBeInTheDocument();
+    expect(nsInput).toBeInTheDocument();
+
+    fireEvent.change(appInput, { target: { value: 'auth-service' } });
+    fireEvent.change(nsInput, { target: { value: 'prod' } });
+
+    // Submit template form
+    fireEvent.click(screen.getByText('Copy to Clipboard'));
+
+    // Verify clipboard was called with interpolated string
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        'kubectl rollout restart deployment/auth-service -n prod'
+      );
+      expect(screen.getByText('Copied "Restart Pod" text data to clipboard!')).toBeInTheDocument();
+    });
+
+    // Verify values were remembered in localStorage
+    const memory = JSON.parse(localStorage.getItem('cpt_template_vars') || '{}');
+    expect(memory.app).toBe('auth-service');
+    expect(memory.namespace).toBe('prod');
+
+    // Next time opening the template modal, remembered values should prefill
+    fireEvent.click(copyBtn);
+    expect(await screen.findByText('Fill Template')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter app...').value).toBe('auth-service');
+    expect(screen.getByPlaceholderText('Enter namespace...').value).toBe('prod');
+  });
+
+  it('binds Cmd+K, Ctrl+K, and / to focus the global search bar', async () => {
+    render(<App />);
+
+    const searchInput = screen.getByPlaceholderText('Search buttons or paste values...');
+    expect(document.activeElement).not.toBe(searchInput);
+
+    // Test / shortcut
+    fireEvent.keyDown(window, { key: '/' });
+    expect(document.activeElement).toBe(searchInput);
+
+    // Blur search input
+    searchInput.blur();
+    expect(document.activeElement).not.toBe(searchInput);
+
+    // Test Cmd+K shortcut
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    expect(document.activeElement).toBe(searchInput);
+
+    searchInput.blur();
+    // Test Ctrl+K shortcut
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(document.activeElement).toBe(searchInput);
+  });
+
+  it('supports Up/Down arrow selection and Enter to copy matching snippet', async () => {
+    render(<App />);
+
+    // Create section
+    fireEvent.click(screen.getByText('Create Section'));
+    fireEvent.change(screen.getByLabelText('Section Name'), { target: { value: 'Commands' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Create first button
+    fireEvent.click(screen.getByText('Add Button'));
+    fireEvent.change(screen.getByLabelText('Button Name'), { target: { value: 'Git Status' } });
+    fireEvent.change(screen.getByLabelText('Paste Value'), { target: { value: 'git status' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Create second button
+    fireEvent.click(screen.getByText('Add Button'));
+    fireEvent.change(screen.getByLabelText('Button Name'), { target: { value: 'Git Pull' } });
+    fireEvent.change(screen.getByLabelText('Paste Value'), { target: { value: 'git pull' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Navigate down with ArrowDown
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    // Press Enter to copy first snippet
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('git status');
+    });
+
+    // Navigate down again to second snippet
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('git pull');
+    });
+  });
+
+  it('binds numeric keys 1-9 to quick-copy top pinned favorites directly', async () => {
+    render(<App />);
+
+    // Create section & button
+    fireEvent.click(screen.getByText('Create Section'));
+    fireEvent.change(screen.getByLabelText('Section Name'), { target: { value: 'Links' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    fireEvent.click(screen.getByText('Add Button'));
+    fireEvent.change(screen.getByLabelText('Button Name'), { target: { value: 'Docs' } });
+    fireEvent.change(screen.getByLabelText('Paste Value'), { target: { value: 'https://docs.codyuhi.online' } });
+    fireEvent.click(screen.getByText('Submit'));
+
+    // Add to favorites via touch more button
+    const moreBtn = screen.getByLabelText('Options for Docs');
+    fireEvent.click(moreBtn);
+    const favItem = screen.getByText('Favorite');
+    fireEvent.click(favItem);
+
+    // Verify Docs is in favorites
+    expect(screen.getByText('Favorites Pane')).toBeInTheDocument();
+
+    // Now press '1' on keyboard outside of inputs
+    fireEvent.keyDown(window, { key: '1' });
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://docs.codyuhi.online');
+      expect(screen.getByText('Copied "Docs" text data to clipboard!')).toBeInTheDocument();
+    });
+  });
+
+  it('toggles hotkey badge visibility and alt-active state when Alt key is held', async () => {
+    render(<App />);
+
+    // Press Alt
+    fireEvent.keyDown(window, { key: 'Alt' });
+    // Release Alt
+    fireEvent.keyUp(window, { key: 'Alt' });
+  });
 });

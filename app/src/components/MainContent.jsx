@@ -1,4 +1,86 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { hasPlaceholders } from '../utils/templates';
+
+const SnippetCardItem = ({
+  btn,
+  coords,
+  keyId,
+  isCopied,
+  isKeyboardSelected,
+  isAltPressed,
+  flatIdx,
+  onCopyClick,
+  onContextMenu,
+  handleTouchStart,
+  handleTouchMove,
+  handleTouchEnd
+}) => {
+  const cardRef = useRef(null);
+  const isTemplated = hasPlaceholders(btn.pasteValue);
+
+  useEffect(() => {
+    if (isKeyboardSelected && cardRef.current && typeof cardRef.current.scrollIntoView === 'function') {
+      cardRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [isKeyboardSelected]);
+
+  return (
+    <div 
+      ref={cardRef} 
+      className={`snippet-card ${isCopied ? 'copied' : ''} ${isKeyboardSelected ? 'keyboard-selected' : ''}`}
+    >
+      {flatIdx < 9 && (
+        <span 
+          className={`hotkey-badge snippet-alt-badge ${isAltPressed ? 'visible alt-active' : ''}`}
+          title={`Alt/Option hotkey: ${flatIdx + 1}`}
+        >
+          {flatIdx + 1}
+        </span>
+      )}
+      <button
+        className="copy-btn"
+        onClick={() => onCopyClick(btn, keyId)}
+        onContextMenu={(e) => onContextMenu(e, 'button', coords)}
+        onTouchStart={(e) => handleTouchStart(e, coords)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        title={btn.pasteValue}
+      >
+        {btn.buttonName}
+        {isTemplated && (
+          <span className="template-indicator-pill" title="Dynamic template placeholder">{`{…}`}</span>
+        )}
+      </button>
+      <button
+        type="button"
+        className="snippet-more-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          onContextMenu(
+            {
+              preventDefault: () => {},
+              clientX: rect.left,
+              clientY: rect.bottom + 4
+            },
+            'button',
+            coords
+          );
+        }}
+        title={`Options for ${btn.buttonName}`}
+        aria-label={`Options for ${btn.buttonName}`}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="2"></circle>
+          <circle cx="12" cy="12" r="2"></circle>
+          <circle cx="12" cy="19" r="2"></circle>
+        </svg>
+      </button>
+      {isCopied && <div className="copied-toast-chip">Copied! ✓</div>}
+    </div>
+  );
+};
 
 const MainContent = ({ 
   sections, 
@@ -9,11 +91,16 @@ const MainContent = ({
   onOpenModal,
   onDeleteSection,
   onSetActiveSection,
-  _onNavigateToSections
+  _onNavigateToSections,
+  searchInputRef,
+  keyboardNavIndex = -1,
+  isAltPressed = false
 }) => {
   const [copiedKey, setCopiedKey] = useState(null);
   const touchTimerRef = useRef(null);
   const touchMovedRef = useRef(false);
+
+  const isMac = typeof navigator !== 'undefined' && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform || navigator.userAgent);
 
   // Filtering logic
   const query = searchQuery.toLowerCase().trim();
@@ -53,7 +140,6 @@ const MainContent = ({
     touchMovedRef.current = false;
     touchTimerRef.current = setTimeout(() => {
       if (!touchMovedRef.current) {
-        // Trigger context menu on long press
         const touch = e.touches[0];
         onContextMenu(
           {
@@ -80,6 +166,8 @@ const MainContent = ({
     }
   };
 
+  let runningFlatCounter = 0;
+
   return (
     <main className="app-main">
       <div className="search-wrapper">
@@ -89,12 +177,16 @@ const MainContent = ({
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input
+            ref={searchInputRef}
             type="text"
             className="search-input"
             placeholder="Search buttons or paste values..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
+          <div className="search-shortcut-hint" aria-hidden="true">
+            <kbd className="search-kbd-pill">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
+          </div>
           {searchQuery && (
             <button 
               type="button" 
@@ -203,48 +295,25 @@ const MainContent = ({
                       };
                       const key = `${sec.originalIndex}-${coords.buttonIdx}`;
                       const isCopied = copiedKey === key;
+                      const currentFlatIdx = runningFlatCounter++;
+                      const isKeyboardSelected = keyboardNavIndex === currentFlatIdx;
                       
                       return (
-                        <div key={btnIdx} className={`snippet-card ${isCopied ? 'copied' : ''}`}>
-                          <button
-                            className="copy-btn"
-                            onClick={() => handleCopyClick(btn, key)}
-                            onContextMenu={(e) => onContextMenu(e, 'button', coords)}
-                            onTouchStart={(e) => handleTouchStart(e, coords)}
-                            onTouchMove={handleTouchMove}
-                            onTouchEnd={handleTouchEnd}
-                            onTouchCancel={handleTouchEnd}
-                            title={btn.pasteValue}
-                          >
-                            {btn.buttonName}
-                          </button>
-                          <button
-                            type="button"
-                            className="snippet-more-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              onContextMenu(
-                                {
-                                  preventDefault: () => {},
-                                  clientX: rect.left,
-                                  clientY: rect.bottom + 4
-                                },
-                                'button',
-                                coords
-                              );
-                            }}
-                            title={`Options for ${btn.buttonName}`}
-                            aria-label={`Options for ${btn.buttonName}`}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                              <circle cx="12" cy="5" r="2"></circle>
-                              <circle cx="12" cy="12" r="2"></circle>
-                              <circle cx="12" cy="19" r="2"></circle>
-                            </svg>
-                          </button>
-                          {isCopied && <div className="copied-toast-chip">Copied! ✓</div>}
-                        </div>
+                        <SnippetCardItem
+                          key={key}
+                          btn={btn}
+                          coords={coords}
+                          keyId={key}
+                          isCopied={isCopied}
+                          isKeyboardSelected={isKeyboardSelected}
+                          isAltPressed={isAltPressed}
+                          flatIdx={currentFlatIdx}
+                          onCopyClick={handleCopyClick}
+                          onContextMenu={onContextMenu}
+                          handleTouchStart={handleTouchStart}
+                          handleTouchMove={handleTouchMove}
+                          handleTouchEnd={handleTouchEnd}
+                        />
                       );
                     })
                   )}

@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import FavoritesPane from './components/FavoritesPane';
 import ContextMenu from './components/ContextMenu';
 import Modals from './components/Modals';
+import TemplateModal from './components/TemplateModal';
 import AuthView from './components/AuthView';
 import { loadSections, saveSections, loadFavorites, saveFavorites } from './utils/storage';
 import { getAuthToken, getStoredUser, apiGetMe, apiFetchUserData, apiSaveUserData, apiLogout } from './utils/api';
+import { extractPlaceholders } from './utils/templates';
 import ThemeToggle from './components/ThemeToggle';
 
 function App() {
@@ -40,6 +42,14 @@ function App() {
   // Toast Notification State
   const [toast, setToast] = useState({ visible: false, message: '' });
   const toastTimeoutRef = useRef(null);
+
+  // Template Prompt State (COPY-4)
+  const [templatePrompt, setTemplatePrompt] = useState(null); // { name, pasteValue, placeholders }
+
+  // Keyboard Navigation & Hotkeys State (COPY-5)
+  const [keyboardNavIndex, setKeyboardNavIndex] = useState(-1);
+  const [isAltPressed, setIsAltPressed] = useState(false);
+  const searchInputRef = useRef(null);
 
   // Active Section navigation tracker (highlight sidebar item based on scroll/click)
   const [activeSectionId, setActiveSectionId] = useState('top');
@@ -164,8 +174,42 @@ function App() {
     };
   }, []);
 
-  // Handle Clipboard Copy
-  const handleCopy = async (name, value) => {
+  // Flattened searchable snippets for keyboard navigation (COPY-5)
+  const flattenedButtons = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    const results = [];
+    sections.forEach((sec, secIdx) => {
+      const matchedButtons = !query
+        ? sec.sectionButtons
+        : sec.sectionButtons.filter(btn =>
+            btn.buttonName.toLowerCase().includes(query) ||
+            btn.pasteValue.toLowerCase().includes(query)
+          );
+      const sectionNameMatches = sec.sectionName.toLowerCase().includes(query);
+      if (sectionNameMatches || matchedButtons.length > 0) {
+        const btns = matchedButtons.length > 0 ? matchedButtons : sec.sectionButtons;
+        btns.forEach((btn, bIdx) => {
+          const originalBtnIdx = sec.sectionButtons.findIndex(
+            b => b.buttonName === btn.buttonName && b.pasteValue === btn.pasteValue
+          );
+          results.push({
+            ...btn,
+            sectionIdx: secIdx,
+            buttonIdx: originalBtnIdx !== -1 ? originalBtnIdx : bIdx
+          });
+        });
+      }
+    });
+    return results;
+  }, [sections, searchQuery]);
+
+  // Reset keyboard navigation index when search query changes
+  useEffect(() => {
+    setKeyboardNavIndex(-1);
+  }, [searchQuery]);
+
+  // Low-level Clipboard Copy execution
+  const performCopy = async (name, value) => {
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(value);
@@ -186,6 +230,145 @@ function App() {
       showToast('Failed to copy text.');
     }
   };
+
+  // Handle Clipboard Copy - checks for template placeholders (COPY-4)
+  const handleCopy = async (name, value) => {
+    const placeholders = extractPlaceholders(value);
+    if (placeholders.length > 0) {
+      setTemplatePrompt({ name, pasteValue: value, placeholders });
+      return;
+    }
+    await performCopy(name, value);
+  };
+
+  // Confirm and copy interpolated template (COPY-4)
+  const handleConfirmTemplate = async (interpolatedText) => {
+    const name = templatePrompt?.name || 'Snippet';
+    setTemplatePrompt(null);
+    await performCopy(name, interpolatedText);
+  };
+
+  // Global Keyboard Shortcuts (COPY-5)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Alt') {
+        setIsAltPressed(true);
+      }
+
+      const activeEl = document.activeElement;
+      const isInputActive = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.isContentEditable ||
+        activeEl.tagName === 'SELECT'
+      );
+
+      // 1. Search focus: Cmd+K / Ctrl+K
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      // 2. Search focus: '/' when not typing in an input and no modal is open
+      if (e.key === '/' && !isInputActive && !activeModal && !templatePrompt) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      // If active modal or template dialog is open, skip general shortcuts
+      if (activeModal || templatePrompt) {
+        return;
+      }
+
+      // 3. Quick-copy hotkeys: numbers 1-9 to copy top pinned favorites
+      if (!isInputActive && !e.metaKey && !e.ctrlKey && e.key >= '1' && e.key <= '9') {
+        const favIdx = parseInt(e.key, 10) - 1;
+        if (favorites[favIdx]) {
+          e.preventDefault();
+          handleCopy(favorites[favIdx].buttonName, favorites[favIdx].pasteValue);
+        }
+        return;
+      }
+
+      // 4. Arrow Navigation
+      if (e.key === 'ArrowDown') {
+        if (flattenedButtons.length > 0) {
+          e.preventDefault();
+          setKeyboardNavIndex((prev) => {
+            const next = prev < flattenedButtons.length - 1 ? prev + 1 : 0;
+            return next;
+          });
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowUp') {
+        if (flattenedButtons.length > 0) {
+          e.preventDefault();
+          setKeyboardNavIndex((prev) => {
+            const next = prev > 0 ? prev - 1 : flattenedButtons.length - 1;
+            return next;
+          });
+        }
+        return;
+      }
+
+      // 5. Enter key to copy
+      if (e.key === 'Enter') {
+        if (isInputActive && activeEl === searchInputRef.current) {
+          if (flattenedButtons.length > 0) {
+            e.preventDefault();
+            const targetIdx = keyboardNavIndex >= 0 && keyboardNavIndex < flattenedButtons.length
+              ? keyboardNavIndex
+              : 0;
+            const target = flattenedButtons[targetIdx];
+            handleCopy(target.buttonName, target.pasteValue);
+          }
+        } else if (!isInputActive && keyboardNavIndex >= 0 && keyboardNavIndex < flattenedButtons.length) {
+          e.preventDefault();
+          const target = flattenedButtons[keyboardNavIndex];
+          handleCopy(target.buttonName, target.pasteValue);
+        }
+        return;
+      }
+
+      // 6. Escape key
+      if (e.key === 'Escape') {
+        if (activeEl === searchInputRef.current) {
+          if (searchQuery) {
+            setSearchQuery('');
+          } else {
+            searchInputRef.current.blur();
+          }
+        }
+        setKeyboardNavIndex(-1);
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === 'Alt') {
+        setIsAltPressed(false);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setIsAltPressed(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [favorites, activeModal, templatePrompt, flattenedButtons, keyboardNavIndex, searchQuery]);
 
   // Section CRUD Operations
   const handleAddSection = (name) => {
@@ -526,7 +709,7 @@ function App() {
             Sign Out
           </button>
 
-          <span className="brand-version">Version 2.0.2</span>
+          <span className="brand-version">Version 2.0.7</span>
           <ThemeToggle />
         </div>
       </header>
@@ -551,6 +734,9 @@ function App() {
         onDeleteSection={handleDeleteSection}
         onSetActiveSection={setActiveSectionIdx}
         onNavigateToSections={() => setMobileTab('sections')}
+        searchInputRef={searchInputRef}
+        keyboardNavIndex={keyboardNavIndex}
+        isAltPressed={isAltPressed}
       />
 
       {/* Favorites Sidebar */}
@@ -559,6 +745,7 @@ function App() {
         onCopy={handleCopy}
         onContextMenu={handleContextMenuTrigger}
         onRemoveFavorite={handleRemoveFavorite}
+        isAltPressed={isAltPressed}
       />
 
       {/* Mobile Bottom Navigation Bar (Visible on screens < 1024px) */}
@@ -647,6 +834,14 @@ function App() {
         onClearAll={handleClearAll}
         user={user}
         onLogout={handleLogout}
+      />
+
+      {/* Dynamic Variable Template Modal (COPY-4) */}
+      <TemplateModal
+        isOpen={!!templatePrompt}
+        onClose={() => setTemplatePrompt(null)}
+        templateData={templatePrompt}
+        onConfirm={handleConfirmTemplate}
       />
 
       {/* Floating Snackbar Toast */}

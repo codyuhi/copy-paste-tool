@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import online.codyuhi.copypastetool.data.db.ButtonEntity
+import online.codyuhi.copypastetool.domain.TemplateHelper
 import online.codyuhi.copypastetool.ui.theme.Cedar
 import online.codyuhi.copypastetool.ui.theme.MonoSmall
 
@@ -61,6 +62,7 @@ fun SnippetCard(
     val view = LocalView.current
     var isCopied by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+    var showTemplatePrompt by remember { mutableStateOf(false) }
 
     LaunchedEffect(isCopied) {
         if (isCopied) {
@@ -90,12 +92,18 @@ fun SnippetCard(
             .clip(MaterialTheme.shapes.small)
             .combinedClickable(
                 onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText(button.buttonName, button.pasteValue)
-                    clipboard.setPrimaryClip(clip)
-                    isCopied = true
-                    onCopy(button.buttonName)
+                    val placeholders = TemplateHelper.extractPlaceholders(button.pasteValue)
+                    if (placeholders.isNotEmpty()) {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        showTemplatePrompt = true
+                    } else {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText(button.buttonName, button.pasteValue)
+                        clipboard.setPrimaryClip(clip)
+                        isCopied = true
+                        onCopy(button.buttonName)
+                    }
                 },
                 onLongClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -128,6 +136,10 @@ fun SnippetCard(
                             tint = Cedar.colors.ochre,
                             modifier = Modifier.size(14.dp)
                         )
+                    }
+                    if (TemplateHelper.hasPlaceholders(button.pasteValue)) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CedarBadge(text = "{…}")
                     }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
@@ -204,5 +216,23 @@ fun SnippetCard(
                 )
             }
         }
+    }
+
+    if (showTemplatePrompt) {
+        TemplatePromptDialog(
+            snippetName = button.buttonName,
+            templateText = button.pasteValue,
+            placeholders = TemplateHelper.extractPlaceholders(button.pasteValue),
+            onDismiss = { showTemplatePrompt = false },
+            onCopy = { interpolatedText ->
+                showTemplatePrompt = false
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText(button.buttonName, interpolatedText)
+                clipboard.setPrimaryClip(clip)
+                isCopied = true
+                onCopy(button.buttonName)
+            }
+        )
     }
 }
