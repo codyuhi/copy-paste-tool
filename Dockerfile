@@ -16,7 +16,7 @@ COPY backend/ ./backend/
 RUN cd backend && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/server ./cmd/server
 
 # Stage 3: Minimal, secure production runtime
-FROM alpine:3.20 AS runner
+FROM alpine:3.24 AS runner
 WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata curl
 
