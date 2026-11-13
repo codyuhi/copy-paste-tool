@@ -1,5 +1,5 @@
 # Stage 1: Build React Vite static bundle
-FROM node:22-alpine AS frontend-builder
+FROM node:25-alpine AS frontend-builder
 WORKDIR /build/app
 COPY app/package.json app/package-lock.json ./
 RUN npm ci || npm install
