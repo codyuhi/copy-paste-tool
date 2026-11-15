@@ -109,9 +109,13 @@ func RequireAuth(next http.Handler) http.Handler {
 			Username: claims.Username,
 		}
 
-		ctx := context.WithValue(r.Context(), UserContextKey, user)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), user)))
 	})
+}
+
+// WithUser returns a copy of ctx carrying the authenticated user.
+func WithUser(ctx context.Context, user *models.User) context.Context {
+	return context.WithValue(ctx, UserContextKey, user)
 }
 
 // GetUserFromContext retrieves authenticated user from request context

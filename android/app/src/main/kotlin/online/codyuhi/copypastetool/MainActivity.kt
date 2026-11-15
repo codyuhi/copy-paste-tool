@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -28,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import kotlinx.coroutines.launch
 import online.codyuhi.copypastetool.ui.AppScaffold
 import online.codyuhi.copypastetool.ui.favorites.FavoritesViewModel
 import online.codyuhi.copypastetool.ui.sections.SectionsViewModel
@@ -96,6 +98,10 @@ class MainActivity : ComponentActivity() {
                 factory = viewModelFactory { initializer { SettingsViewModel(container.settingsRepository, container.copyPasteRepository) } }
             )
 
+            val repo = container.copyPasteRepository
+            val isLihim by repo.isLihim.collectAsStateWithLifecycle()
+            val lihimScope = rememberCoroutineScope()
+
             val colors = if (dark) CedarDark else CedarLight
             CedarTheme(colors = colors) {
                 AppScaffold(
@@ -116,6 +122,16 @@ class MainActivity : ComponentActivity() {
                     sharedTextIntent = sharedText,
                     deepLinkRoute = deepLinkRoute,
                     hasLocalNetworkAccess = lanGranted,
+                    isLihim = isLihim,
+                    onLihimGesture = {
+                        if (isLihim) {
+                            repo.closeLihim()
+                        } else {
+                            // The server answers 404 unless this is a signed-in admin, in which case nothing happens.
+                            lihimScope.launch { repo.openLihim() }
+                        }
+                    },
+                    onExitLihim = repo::closeLihim,
                     onRequestLocalNetwork = {
                         if (Build.VERSION.SDK_INT >= 37) {
                             lanPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
@@ -126,6 +142,12 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    // Lihim content lives only in memory and is dropped as soon as the app leaves the screen.
+    override fun onStop() {
+        super.onStop()
+        (application as CopyPasteApplication).container.copyPasteRepository.closeLihim()
     }
 
     override fun onNewIntent(intent: Intent) {

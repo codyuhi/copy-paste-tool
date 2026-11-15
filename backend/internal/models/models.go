@@ -10,6 +10,7 @@ type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
+	IsAdmin      bool      `json:"isAdmin,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -43,8 +44,8 @@ type UserDataPayload struct {
 
 // RegisterRequest payload for creating an account
 type RegisterRequest struct {
-	Username         string            `json:"username"`
-	Password         string            `json:"password"`
+	Username         string           `json:"username"`
+	Password         string           `json:"password"`
 	InitialSections  []CopySection    `json:"initialSections,omitempty"`
 	InitialFavorites []FavoriteButton `json:"initialFavorites,omitempty"`
 }

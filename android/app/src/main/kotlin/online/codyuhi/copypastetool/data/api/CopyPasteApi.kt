@@ -35,6 +35,16 @@ interface CopyPasteApi {
         @Body req: UserDataPayload
     ): Response<GenericResponse>
 
+    // Admin-only; anyone else gets a 404.
+    @GET("api/lihim/data")
+    suspend fun getLihimData(@Header("Authorization") auth: String): Response<UserDataPayload>
+
+    @PUT("api/lihim/data")
+    suspend fun putLihimData(
+        @Header("Authorization") auth: String,
+        @Body req: UserDataPayload
+    ): Response<GenericResponse>
+
     @GET("healthz")
     suspend fun getHealth(): Response<Map<String, String>>
 }

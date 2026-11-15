@@ -57,6 +57,14 @@ func runMigrations(db *sql.DB) error {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
+
+	-- Lihim snippets: sections + favorites JSON sealed with AES-256-GCM.
+	CREATE TABLE IF NOT EXISTS lihim_data (
+		user_id TEXT PRIMARY KEY,
+		sealed BLOB NOT NULL,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
 	`
 
 	_, err := db.Exec(schema)

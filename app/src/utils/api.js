@@ -161,3 +161,31 @@ export const apiSaveUserData = async (sections, favorites) => {
 
   return await res.json();
 };
+
+// Lihim (private, encrypted-at-rest) snippets. Admin only; every refusal is a
+// 404, which is reported as null. Lihim data is never written to localStorage.
+export const apiFetchLihimData = async () => {
+  if (!getAuthToken()) return null;
+  const res = await fetch(`${API_BASE}/lihim/data`, {
+    headers: authHeaders(),
+    cache: 'no-store'
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error('Failed to fetch data');
+  }
+  return await res.json();
+};
+
+export const apiSaveLihimData = async (sections, favorites) => {
+  if (!getAuthToken()) throw new Error('Not signed in');
+  const res = await fetch(`${API_BASE}/lihim/data`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ sections, favorites })
+  });
+  if (!res.ok) {
+    throw new Error('Failed to save data to server');
+  }
+  return await res.json();
+};

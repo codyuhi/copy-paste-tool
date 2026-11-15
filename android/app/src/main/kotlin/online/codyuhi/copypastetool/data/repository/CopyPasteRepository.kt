@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import online.codyuhi.copypastetool.data.api.CopyPasteApi
@@ -44,13 +46,20 @@ class CopyPasteRepository(
     private val settingsRepository: SettingsRepository,
     private val sablierInterceptor: SablierInterceptor,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    private val lihimStore: LihimStore = LihimStore(),
 ) {
     val isWaking: StateFlow<Boolean> = sablierInterceptor.isWaking
 
     private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
-    val sectionsWithButtons: Flow<List<SectionWithButtons>> =
+    // While true, every read and write goes to the in-memory lihim store instead
+    // of Room, so the screens show only lihim content.
+    private val _isLihim = MutableStateFlow(false)
+    val isLihim: StateFlow<Boolean> = _isLihim.asStateFlow()
+    private val lihimPushLock = Mutex()
+
+    private val roomSectionsWithButtons: Flow<List<SectionWithButtons>> =
         combine(copyPasteDao.observeSections(), copyPasteDao.observeButtons()) { sections, buttons ->
             val buttonsBySection = buttons.groupBy { it.sectionId }
             sections.map { section ->
@@ -61,9 +70,65 @@ class CopyPasteRepository(
             }
         }
 
-    val favorites: Flow<List<ButtonEntity>> = copyPasteDao.observeFavorites()
+    val sectionsWithButtons: Flow<List<SectionWithButtons>> =
+        combine(_isLihim, roomSectionsWithButtons, lihimStore.sections) { lihim, room, hidden ->
+            if (lihim) hidden else room
+        }
+
+    val favorites: Flow<List<ButtonEntity>> =
+        combine(_isLihim, copyPasteDao.observeFavorites(), lihimStore.sections) { lihim, room, hidden ->
+            if (lihim) lihimStore.favorites(hidden) else room
+        }
+
+    /**
+     * Fetches and shows the lihim set. Returns false (and changes nothing) when the
+     * server refuses, which it does with a 404 for anyone but a signed-in admin.
+     */
+    suspend fun openLihim(): Boolean {
+        val token = settingsRepository.authToken.firstOrNull()
+        if (token.isNullOrBlank()) return false
+        return try {
+            val res = api.getLihimData("Bearer $token")
+            val body = res.body()
+            if (res.isSuccessful && body != null) {
+                lihimStore.load(body)
+                _isLihim.value = true
+                _syncStatus.value = SyncStatus.Idle
+                true
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun closeLihim() {
+        if (!_isLihim.value) return
+        _isLihim.value = false
+        lihimStore.clear()
+        _syncStatus.value = SyncStatus.Idle
+    }
+
+    private fun pushLihim() {
+        scope.launch {
+            lihimPushLock.withLock {
+                if (!_isLihim.value) return@withLock
+                val token = settingsRepository.authToken.firstOrNull()
+                if (token.isNullOrBlank()) return@withLock
+                _syncStatus.value = SyncStatus.Syncing
+                _syncStatus.value = try {
+                    val res = api.putLihimData("Bearer $token", lihimStore.toPayload())
+                    if (res.isSuccessful) SyncStatus.Success("Saved") else SyncStatus.Error("Save failed: HTTP ${res.code()}")
+                } catch (e: Exception) {
+                    SyncStatus.Error(e.message ?: "Failed to connect to homelab")
+                }
+            }
+        }
+    }
 
     suspend fun addSection(name: String): Long {
+        if (_isLihim.value) return lihimStore.addSection(name).also { pushLihim() }
         val count = copyPasteDao.getSections().size
         val id = copyPasteDao.insertSection(
             SectionEntity(
@@ -76,17 +141,28 @@ class CopyPasteRepository(
     }
 
     suspend fun updateSection(sectionId: Long, name: String) {
+        if (_isLihim.value) {
+            lihimStore.updateSection(sectionId, name)
+            pushLihim()
+            return
+        }
         val existing = copyPasteDao.getSectionById(sectionId) ?: return
         copyPasteDao.updateSection(existing.copy(name = name.trim()))
         triggerSyncAfterMutation()
     }
 
     suspend fun deleteSection(sectionId: Long) {
+        if (_isLihim.value) {
+            lihimStore.deleteSection(sectionId)
+            pushLihim()
+            return
+        }
         copyPasteDao.deleteSection(sectionId)
         triggerSyncAfterMutation()
     }
 
     suspend fun addButton(sectionId: Long, name: String, pasteValue: String): Long {
+        if (_isLihim.value) return lihimStore.addButton(sectionId, name, pasteValue).also { pushLihim() }
         val count = copyPasteDao.getButtons().count { it.sectionId == sectionId }
         val id = copyPasteDao.insertButton(
             ButtonEntity(
@@ -102,6 +178,11 @@ class CopyPasteRepository(
     }
 
     suspend fun updateButton(buttonId: Long, name: String, pasteValue: String, isFavorite: Boolean) {
+        if (_isLihim.value) {
+            lihimStore.updateButton(buttonId) { it.copy(buttonName = name.trim(), pasteValue = pasteValue, isFavorite = isFavorite) }
+            pushLihim()
+            return
+        }
         val existing = copyPasteDao.getButtonById(buttonId) ?: return
         copyPasteDao.updateButton(
             existing.copy(
@@ -114,11 +195,21 @@ class CopyPasteRepository(
     }
 
     suspend fun deleteButton(buttonId: Long) {
+        if (_isLihim.value) {
+            lihimStore.deleteButton(buttonId)
+            pushLihim()
+            return
+        }
         copyPasteDao.deleteButton(buttonId)
         triggerSyncAfterMutation()
     }
 
     suspend fun toggleFavorite(buttonId: Long, isFavorite: Boolean) {
+        if (_isLihim.value) {
+            lihimStore.updateButton(buttonId) { it.copy(isFavorite = isFavorite) }
+            pushLihim()
+            return
+        }
         copyPasteDao.setFavorite(buttonId, isFavorite)
         triggerSyncAfterMutation()
     }
@@ -165,6 +256,11 @@ class CopyPasteRepository(
     }
 
     suspend fun syncWithServer(): Result<Unit> {
+        // Room is untouched while lihim is open, so a sync then means "save lihim".
+        if (_isLihim.value) {
+            pushLihim()
+            return Result.success(Unit)
+        }
         val token = settingsRepository.authToken.firstOrNull()
         if (token.isNullOrBlank()) {
             _syncStatus.value = SyncStatus.Idle
@@ -327,6 +423,7 @@ class CopyPasteRepository(
     }
 
     suspend fun logout() {
+        closeLihim()
         val token = settingsRepository.authToken.firstOrNull()
         if (!token.isNullOrBlank()) {
             try {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/codyuhi/copy-paste-tool/backend/internal/auth"
+	"github.com/codyuhi/copy-paste-tool/backend/internal/lihim"
 	"github.com/codyuhi/copy-paste-tool/backend/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -18,11 +19,36 @@ import (
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]{3,32}$`)
 
 type Handler struct {
-	db *sql.DB
+	db      *sql.DB
+	keyring *lihim.Keyring      // nil when LIHIM_KEY is not configured
+	admins  map[string]struct{} // lower-cased admin usernames
 }
 
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+// Option configures optional Handler features.
+type Option func(*Handler)
+
+// WithLihim enables the encrypted lihim store.
+func WithLihim(k *lihim.Keyring) Option {
+	return func(h *Handler) { h.keyring = k }
+}
+
+// WithAdmins sets the usernames that are treated as admins.
+func WithAdmins(usernames ...string) Option {
+	return func(h *Handler) {
+		for _, u := range usernames {
+			if u = strings.ToLower(strings.TrimSpace(u)); u != "" {
+				h.admins[u] = struct{}{}
+			}
+		}
+	}
+}
+
+func NewHandler(db *sql.DB, opts ...Option) *Handler {
+	h := &Handler{db: db, admins: map[string]struct{}{}}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *Handler) Routes() chi.Router {
@@ -40,6 +66,8 @@ func (h *Handler) Routes() chi.Router {
 		protected.Get("/data", h.GetData)
 		protected.Put("/data", h.PutData)
 	})
+
+	r.Route("/lihim", h.lihimRoutes)
 
 	return r
 }
@@ -142,6 +170,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	user := &models.User{
 		ID:        userID,
 		Username:  req.Username,
+		IsAdmin:   h.isAdmin(req.Username),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -187,6 +216,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user.IsAdmin = h.isAdmin(user.Username)
 	token, err := auth.GenerateToken(&user)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to generate authorization token")
@@ -224,6 +254,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, "User not found")
 		return
 	}
+	fullUser.IsAdmin = h.isAdmin(fullUser.Username)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"user": fullUser,

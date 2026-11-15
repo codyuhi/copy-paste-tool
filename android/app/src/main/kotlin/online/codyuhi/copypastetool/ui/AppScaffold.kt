@@ -2,6 +2,8 @@ package online.codyuhi.copypastetool.ui
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowWidthSizeClass
 import online.codyuhi.copypastetool.data.repository.SyncStatus
+import online.codyuhi.copypastetool.domain.LihimTapCounter
 import online.codyuhi.copypastetool.ui.components.AddEditSnippetDialog
 import online.codyuhi.copypastetool.ui.components.CedarThemeToggle
 import online.codyuhi.copypastetool.ui.components.LocalNetworkBanner
@@ -67,9 +70,25 @@ fun AppScaffold(
     deepLinkRoute: String?,
     hasLocalNetworkAccess: Boolean,
     onRequestLocalNetwork: () -> Unit,
+    isLihim: Boolean,
+    onLihimGesture: () -> Unit,
+    onExitLihim: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var currentDestination by remember { mutableStateOf<NavDestination>(NavDestination.Snippets) }
+    val lihimTaps = remember { LihimTapCounter() }
+
+    // Entering or leaving lihim starts from a clean Snippets view, so no search or
+    // section filter carries over between the two sets.
+    var shownLihim by remember { mutableStateOf(isLihim) }
+    LaunchedEffect(isLihim) {
+        if (shownLihim == isLihim) return@LaunchedEffect
+        shownLihim = isLihim
+        currentDestination = NavDestination.Snippets
+        snippetsViewModel.onSearchQueryChange("")
+        snippetsViewModel.onSectionFilterChange(null)
+        favoritesViewModel.onSearchQueryChange("")
+    }
 
     // Handle deep links
     LaunchedEffect(deepLinkRoute) {
@@ -152,10 +171,16 @@ fun AppScaffold(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Copy-Paste Tool",
+                                text = if (isLihim) "Lihim" else "Copy-Paste Tool",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = Cedar.colors.ink
+                                color = Cedar.colors.ink,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    if (lihimTaps.tap(System.currentTimeMillis())) onLihimGesture()
+                                }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             // Cloud status icon indicator
@@ -198,6 +223,16 @@ fun AppScaffold(
                         }
                     },
                     actions = {
+                        if (isLihim) {
+                            IconButton(onClick = onExitLihim) {
+                                Icon(
+                                    imageVector = Lucide.X,
+                                    contentDescription = "Exit Lihim",
+                                    tint = Cedar.colors.ink2,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         CedarThemeToggle(
                             currentMode = currentThemeMode,
                             isDark = isDarkTheme,

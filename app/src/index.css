@@ -169,6 +169,31 @@ button, a, input, textarea {
   color: var(--text-emphasis);
 }
 
+/* The title is also the lihim tap target; keep repeated taps from selecting text. */
+.brand-title {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-lihim-exit {
+  margin-left: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-lihim-exit:hover {
+  background: var(--bg-hover);
+  color: var(--text-emphasis);
+}
+
 .header-right {
   display: flex;
   align-items: center;

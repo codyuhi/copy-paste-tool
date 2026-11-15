@@ -33,6 +33,7 @@ data class UserDataPayload(
 data class User(
     val id: String,
     val username: String,
+    val isAdmin: Boolean = false,
     val createdAt: String? = null,
     val updatedAt: String? = null,
 )

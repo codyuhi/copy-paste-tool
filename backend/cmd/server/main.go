@@ -15,6 +15,7 @@ import (
 
 	"github.com/codyuhi/copy-paste-tool/backend/internal/database"
 	"github.com/codyuhi/copy-paste-tool/backend/internal/handlers"
+	"github.com/codyuhi/copy-paste-tool/backend/internal/lihim"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -61,7 +62,7 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	h := handlers.NewHandler(db)
+	h := handlers.NewHandler(db, handlerOptions()...)
 
 	// Liveness and readiness probe endpoint
 	r.Get("/healthz", h.HealthCheck)
@@ -155,4 +156,42 @@ func serveSPA(r chi.Router, staticDir string) {
 
 		fileServer.ServeHTTP(w, req)
 	})
+}
+
+// envOrFile returns the env var, or the trimmed contents of the file named by
+// <name>_FILE, or "".
+func envOrFile(name string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
+	}
+	if path := os.Getenv(name + "_FILE"); path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			return strings.TrimSpace(string(b))
+		}
+		log.Printf("Warning: could not read %s_FILE", name)
+	}
+	return ""
+}
+
+// handlerOptions configures admins (ADMIN_USERNAMES, comma separated) and the
+// lihim store (LIHIM_KEY, 32 bytes as base64 or hex). Without a valid key the
+// lihim routes do not exist.
+func handlerOptions() []handlers.Option {
+	var opts []handlers.Option
+	if admins := envOrFile("ADMIN_USERNAMES"); admins != "" {
+		opts = append(opts, handlers.WithAdmins(strings.Split(admins, ",")...))
+	}
+	if raw := envOrFile("LIHIM_KEY"); raw != "" {
+		key, err := lihim.ParseKey(raw)
+		var k *lihim.Keyring
+		if err == nil {
+			k, err = lihim.NewKeyring(key)
+		}
+		if err != nil {
+			log.Printf("Warning: LIHIM_KEY is invalid; feature disabled: %v", err)
+		} else {
+			opts = append(opts, handlers.WithLihim(k))
+		}
+	}
+	return opts
 }

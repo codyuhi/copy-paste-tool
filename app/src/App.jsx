@@ -7,9 +7,14 @@ import Modals from './components/Modals';
 import TemplateModal from './components/TemplateModal';
 import AuthView from './components/AuthView';
 import { loadSections, saveSections, loadFavorites, saveFavorites } from './utils/storage';
-import { getAuthToken, getStoredUser, apiGetMe, apiFetchUserData, apiSaveUserData, apiLogout } from './utils/api';
+import { getAuthToken, getStoredUser, apiGetMe, apiFetchUserData, apiSaveUserData, apiLogout, apiFetchLihimData, apiSaveLihimData } from './utils/api';
 import { extractPlaceholders } from './utils/templates';
 import ThemeToggle from './components/ThemeToggle';
+
+// Tapping the header title this many times in quick succession toggles the
+// lihim view (admins only).
+const LIHIM_TAPS = 5;
+const LIHIM_TAP_WINDOW_MS = 2500;
 
 function App() {
   // App States
@@ -54,8 +59,31 @@ function App() {
   // Active Section navigation tracker (highlight sidebar item based on scroll/click)
   const [activeSectionId, setActiveSectionId] = useState('top');
 
+  // Lihim view: sections/favorites hold the decrypted lihim set, which lives only
+  // in memory (never localStorage) and is saved straight to the encrypted store.
+  const [isLihim, setIsLihim] = useState(false);
+  const lihimRef = useRef(false);
+  // Bumped on every switch between views so late async results for the other
+  // view are dropped instead of overwriting what is on screen.
+  const viewGenRef = useRef(0);
+  const lihimTapsRef = useRef([]);
+
   // Helper to persist locally and sync to server if authenticated
   const saveAndSync = useCallback(async (newSections, newFavorites) => {
+    if (lihimRef.current) {
+      setSyncStatus('saving');
+      try {
+        await apiSaveLihimData(newSections, newFavorites);
+        setSyncStatus('saved');
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = setTimeout(() => setSyncStatus('idle'), 2500);
+      } catch (err) {
+        console.error('Failed to save:', err);
+        setSyncStatus('error');
+      }
+      return;
+    }
+
     saveSections(newSections);
     saveFavorites(newFavorites);
 
@@ -82,11 +110,13 @@ function App() {
       const token = getAuthToken();
       if (!token) return;
 
+      const gen = viewGenRef.current;
       try {
         const currentUser = await apiGetMe();
         if (currentUser) {
           setUser(currentUser);
           const data = await apiFetchUserData();
+          if (gen !== viewGenRef.current) return;
           if (data && (data.sections?.length > 0 || data.favorites?.length > 0)) {
             setSections(data.sections || []);
             setFavorites(data.favorites || []);
@@ -120,8 +150,21 @@ function App() {
   useEffect(() => {
     const handleVisibilitySync = async () => {
       if (!getAuthToken()) return;
+      const gen = viewGenRef.current;
       try {
+        if (lihimRef.current) {
+          const data = await apiFetchLihimData();
+          if (gen !== viewGenRef.current || !data) return;
+          if (JSON.stringify(sectionsRef.current) !== JSON.stringify(data.sections || [])) {
+            setSections(data.sections || []);
+          }
+          if (JSON.stringify(favoritesRef.current) !== JSON.stringify(data.favorites || [])) {
+            setFavorites(data.favorites || []);
+          }
+          return;
+        }
         const data = await apiFetchUserData();
+        if (gen !== viewGenRef.current) return;
         if (data?.sections) {
           const curSec = JSON.stringify(sectionsRef.current);
           const newSec = JSON.stringify(data.sections);
@@ -562,8 +605,49 @@ function App() {
     }
   };
 
+  // Switch between the regular and lihim views, resetting transient UI state.
+  const switchView = (lihim, data) => {
+    viewGenRef.current += 1;
+    lihimRef.current = lihim;
+    setIsLihim(lihim);
+    setSections(lihim ? data.sections || [] : loadSections());
+    setFavorites(lihim ? data.favorites || [] : loadFavorites());
+    setSearchQuery('');
+    setKeyboardNavIndex(-1);
+    setActiveModal(null);
+    setTemplatePrompt(null);
+    setContextMenu((m) => ({ ...m, visible: false }));
+    setActiveSectionIdx(null);
+    setActiveButtonCoords(null);
+    setActiveSectionId('top');
+    setMobileTab('snippets');
+    setSyncStatus('idle');
+  };
+
+  const handleTitleTap = async () => {
+    if (!user?.isAdmin) return;
+    const now = Date.now();
+    const taps = [...lihimTapsRef.current, now].filter((t) => now - t < LIHIM_TAP_WINDOW_MS);
+    lihimTapsRef.current = taps;
+    if (taps.length < LIHIM_TAPS) return;
+    lihimTapsRef.current = [];
+
+    if (lihimRef.current) {
+      switchView(false);
+      return;
+    }
+    const gen = viewGenRef.current;
+    try {
+      const data = await apiFetchLihimData();
+      if (data && gen === viewGenRef.current) switchView(true, data);
+    } catch (err) {
+      console.warn('Could not open view:', err);
+    }
+  };
+
   // Sign out Handler
   const handleLogout = async () => {
+    if (lihimRef.current) switchView(false);
     await apiLogout();
     setUser(null);
     setSyncStatus('idle');
@@ -637,7 +721,7 @@ function App() {
   }
 
   return (
-    <div className={`app-container tab-${mobileTab}`}>
+    <div className={`app-container tab-${mobileTab}${isLihim ? ' lihim' : ''}`}>
       {/* Header Banner */}
       <header className="app-header">
         <div className="header-left">
@@ -652,7 +736,24 @@ function App() {
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
           </button>
-          <span className="brand-title">Chat Agent Tool</span>
+          <span
+            className="brand-title"
+            onClick={handleTitleTap}
+            data-testid="brand-title"
+          >
+            {isLihim ? 'Lihim' : 'Chat Agent Tool'}
+          </span>
+          {isLihim && (
+            <button
+              type="button"
+              className="btn-lihim-exit"
+              onClick={() => switchView(false)}
+              title="Exit Lihim"
+              aria-label="Exit Lihim"
+            >
+              Exit
+            </button>
+          )}
         </div>
         
         <div className="header-right">
@@ -709,7 +810,7 @@ function App() {
             Sign Out
           </button>
 
-          <span className="brand-version">Version 2.0.7</span>
+          <span className="brand-version">Version 2.1.0</span>
           <ThemeToggle />
         </div>
       </header>
