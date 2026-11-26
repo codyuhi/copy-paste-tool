@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         applicationId = "online.codyuhi.copypastetool"
-        minSdk = 33
+        minSdk = 24
         targetSdk = 37
         versionName = appVersionName
         versionCode = appVersionCode
